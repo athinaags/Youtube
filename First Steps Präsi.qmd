@@ -1,0 +1,87 @@
+---
+title: "First Steps Präsi"
+author: "Athina"
+format: revealjs
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished presentation. To learn more about Quarto presentations see <https://quarto.org/docs/presentations/>.
+
+## Bullets
+
+When you click the **Render** button a document will be generated that includes:
+
+-   Content authored with markdown
+-   Output from executable code
+
+## Code
+
+When you click the **Render** button a presentation will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+## Introduction & Topic
+
+### Working Title:
+
+What Drives Engagement on YouTube? A Data Analysis of Influencer Metrics and Audience Interaction
+
+### Research Question:
+
+Which factors (e.g., posting time, video length, views, likes, comments) most strongly influence engagement on YouTube?
+
+measurable features like: \* video length \* category \* posting time \* channel size (subscribers) \* etc.
+
+## First Steps
+
+### Run this first
+
+```{r}
+install.packages(c("tidyverse","lubridate","skimr","janitor","broom"))
+```
+
+### Load packages
+
+```{r}
+library(tidyverse) 
+library(lubridate)  
+library(skimr)      
+library(janitor)    
+library(broom)       
+```
+
+### Import data set
+
+```{r}
+yt <- readr::read_csv("data/all_youtube_analytics.csv")
+```
+### Define Engagement Rate
+```{r}
+yt_clean <- yt %>%
+  mutate(
+    engagement_actions = likes + comments + shares,
+    engagement_rate = if_else(views > 0, engagement_actions / views, NA_real_)
+  )
+```
+### Video Level Datensatz
+```{r}
+yt_video <- yt_clean %>%
+  group_by(video_id) %>%
+  summarise(
+    total_views = sum(views),
+    total_engagement_actions = sum(engagement_actions),
+    engagement_rate = mean(engagement_rate, na.rm = TRUE),
+    avg_watch_time = mean(averageViewDuration, na.rm = TRUE),
+    avg_view_percentage = mean(averageViewPercentage, na.rm = TRUE),
+    total_minutes_watched = sum(estimatedMinutesWatched + estimatedRedMinutesWatched),
+    total_likes = sum(likes),
+    total_comments = sum(comments),
+    total_shares = sum(shares),
+    net_subscribers = sum(subscribersGained - subscribersLost)
+  )
+```
+
