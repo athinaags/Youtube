@@ -59,7 +59,9 @@ library(broom)
 ```{r}
 yt <- readr::read_csv("data/all_youtube_analytics.csv")
 ```
+
 ### Define Engagement Rate
+
 ```{r}
 yt_clean <- yt %>%
   mutate(
@@ -67,7 +69,9 @@ yt_clean <- yt %>%
     engagement_rate = if_else(views > 0, engagement_actions / views, NA_real_)
   )
 ```
+
 ### Video Level Datensatz
+
 ```{r}
 yt_video <- yt_clean %>%
   group_by(video_id) %>%
@@ -84,4 +88,3 @@ yt_video <- yt_clean %>%
     net_subscribers = sum(subscribersGained - subscribersLost)
   )
 ```
-

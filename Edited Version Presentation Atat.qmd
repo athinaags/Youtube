@@ -1,0 +1,296 @@
+---
+title: What Drives Engagement on YouTube?
+subtitle: A Data Analysis of Influencer Metrics
+author: Athina Agiakatsikas & Stella Christou
+date: 2025-12-10
+format:
+  revealjs:
+    theme: default
+    transition: slide
+    background-transition: fade
+execute:
+  warning: false
+  message: false
+  echo: false
+---
+
+# Introduction
+
+## Research question
+
+What factors most strongly influence engagement on YouTube?
+
+### Examples of factors
+
+-   Number of views
+-   How long people watch
+-   Day of the week posted
+-   Number of likes and comments
+
+## Why this matters
+
+Understanding what drives engagement helps us:
+
+-   Make better content
+-   Post at the right time
+-   Grow our audience faster
+
+------------------------------------------------------------------------
+
+# Data Overview
+
+## What data did we analyze?
+
+-   Time period: September 2019 - November 2024 (5 years)
+-   Number of videos: About 300 videos
+-   Daily records: 234,889 observations
+-   Source: YouTube Analytics (official data)
+
+## What we measured
+
+We looked at:
+
+-   Views: How many people watched
+-   Likes: Approval
+-   Comments: Active engagement
+-   Watch time: How long people watched
+-   Subscribers gained: New followers
+
+------------------------------------------------------------------------
+
+# What is Engagement?
+
+## Simple definition
+
+Engagement = How much people interact with your videos
+
+$$\text{Engagement Rate} = \frac{\text{Likes + Comments}}{\text{Views}} \times 100$$
+
+## How do we measure if the engagement rate is good or bad?
+
+There is no universal standard for engagement across all youtube channels, so we used our own data
+
+------------------------------------------------------------------------
+
+# Our Findings
+
+## First steps
+
+**Status of our data set**: Messy, has gaps, duplicates, mixed-up data types
+
+**Example of what "messy" looks like:**
+
+```         
+date          | views | likes | comments | watch_time | notes
+2019-09-01    | 1500  | 45    | (blank)  | 12500      | (incomplete)
+2019-09-01    | 1500  | 45    | (blank)  | 12500      | (duplicate row!)
+2019-09-02    | NULL  | 50    | 3        | (text!)    | (broken data)
+```
+
+**What we did:** Clean up this mess into usable files
+
+------------------------------------------------------------------------
+
+```{r}
+library(tidyverse)
+video_perf <- read_csv("../data/video_performance.csv")
+
+summary_stats <- video_perf %>%
+  summarise(
+    avg_engagement = paste0(round(mean(engagement_rate, na.rm = TRUE), 2), "%"),
+    median_engagement = paste0(round(median(engagement_rate, na.rm = TRUE), 2), "%"),
+    median_like_rate = paste0(round(median(like_rate, na.rm = TRUE), 2), "%"),
+    median_comment_rate = paste0(round(median(comment_rate, na.rm = TRUE), 2), "%")
+  )
+
+knitr::kable(summary_stats)
+```
+
+## Key statistics
+
+-   Average engagement: 3.32% (meaning on average, 3.32 out of 100 viewers like or comment)
+-   Median engagement: 1.89% (middle value - many videos have lower engagement)
+-   Likes are more common: About 1.76% average like rate
+-   Comments are rare: Only 0.09% average comment rate (comments are 15-20x less common than likes!)
+
+------------------------------------------------------------------------
+
+# What Drives Engagement?
+
+## The correlation analysis explained
+
+Correlation = How two things move together
+
+-   +1.0 = Perfect positive relationship (both go up together)
+-   0 = No relationship
+-   -1.0 = Perfect negative relationship (one goes up, other goes down)
+
+We look for numbers close to +1.0 or -1.0 to find what matters!
+
+## My results - ranked
+
+```{r}
+drivers <- data.frame(
+  Factor = c("Like Rate", "View Percentage", "Comment Rate", "Watch Duration"),
+  Correlation = c("0.99", "0.37", "0.35", "-0.51"),
+  Meaning = c(
+    "Strongest predictor! Likes show engagement",
+    "Videos people watch fully get more engagement",
+    "People who comment are engaged",
+    "Surprisingly: longer videos have LOWER engagement!"
+  )
+)
+
+knitr::kable(drivers)
+```
+
+------------------------------------------------------------------------
+
+# Key Insight 1: Quality Beats Quantity
+
+Videos with fewer views can have HIGHER engagement rates!
+
+-   A video with 1,000 views and 50 likes = 5% engagement (great!)
+-   A video with 100,000 views and 500 likes = 0.5% engagement (weak)
+
+Lesson: Focus on making content your audience cares about, not just getting views.
+
+------------------------------------------------------------------------
+
+# Key Insight 2: Best Days to Post
+
+```{r}
+weekly <- read_csv("../data/weekly_pattern.csv")
+
+ggplot(weekly, aes(x = fct_inorder(day_of_week), y = avg_engagement_rate, fill = day_of_week)) +
+  geom_col(show.legend = FALSE) +
+  labs(
+    title = "Average Engagement by Day of Week",
+    x = "Day of Week",
+    y = "Engagement Rate (%)"
+  ) +
+  theme_minimal()
+```
+
+Look at the chart and find the tallest bar - that's your best day to post!
+
+------------------------------------------------------------------------
+
+# Key Insight 3: Engagement Trends Over Time
+
+```{r}
+daily <- read_csv("../data/daily_performance.csv")
+
+ggplot(daily, aes(x = date, y = avg_engagement_rate)) +
+  geom_line(color = "#2E86AB") +
+  geom_smooth(method = "loess", color = "#A23B72", alpha = 0.2) +
+  labs(
+    title = "Engagement Rate Trend Over Time",
+    x = "Date",
+    y = "Average Engagement Rate (%)"
+  ) +
+  scale_x_date(date_breaks = "6 months") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+------------------------------------------------------------------------
+
+# Key Insight 4: Likes vs Comments
+
+```{r}
+engagement_types <- data.frame(
+  Type = c("Likes", "Comments"),
+  Percentage = c(
+    round(median(video_perf$like_rate, na.rm = TRUE), 2),
+    round(median(video_perf$comment_rate, na.rm = TRUE), 2)
+  )
+)
+
+ggplot(engagement_types, aes(x = Type, y = Percentage, fill = Type)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "Median: Likes vs Comments", y = "Percentage of Viewers (%)") +
+  theme_minimal()
+```
+
+## The takeaway
+
+-   Likes: Easy to give, common (1.76% median)
+-   Comments: Harder to give, rare (0.09% median), but show REAL engagement
+-   Ratio: About 15-20 likes for every 1 comment
+
+Comments are gold! They show people really care about your content.
+
+------------------------------------------------------------------------
+
+# My Recommendations
+
+## 1. Focus on content quality
+
+Not views - engagement!
+
+-   Make videos your audience genuinely cares about
+-   A video with 1,000 engaged viewers is better than 100,000 bored viewers
+-   Check your best-performing videos and see what they have in common
+
+## 2. Encourage comments
+
+Comments show real engagement
+
+-   Ask questions in your videos
+-   Respond to comments (builds community)
+-   Comments = free advertising (YouTube shows them to others)
+
+## 3. Post at the right time
+
+Use the day-of-week chart
+
+-   Post when your audience is active
+-   Different days work for different audiences
+-   Test and monitor what works for YOU
+
+## 4. Watch retention matters
+
+Keep people watching
+
+-   Shorter, focused videos can outperform long ones
+-   Hook viewers in the first 10 seconds
+-   Get to the point quickly
+
+## 5. Track your progress
+
+Monitor these metrics monthly
+
+-   Engagement rate (likes + comments ÷ views)
+-   Like rate
+-   Comment rate
+-   Subscriber growth
+
+------------------------------------------------------------------------
+
+# Summary
+
+## What we learned
+
+1.  Quality \> Quantity: High engagement beats high view counts
+2.  Timing matters: Post when your audience is online
+3.  Comments are valuable: They show real interest
+4.  Engagement drives growth: More engagement = more subscribers
+5.  Watch retention is key: Keep people watching until the end
+
+## Your numbers
+
+-   Average engagement: 3.32%
+-   Best interaction type: Likes (15-20x more common than comments)
+-   Best day to post: Check your data (weekly_pattern.csv)
+
+## Next steps
+
+1.  Apply these insights to your content strategy
+2.  Track your metrics monthly
+3.  Test different posting times and content types
+4.  Monitor which videos get the most engagement
+
+------------------------------------------------------------------------
+
+# Questions?
