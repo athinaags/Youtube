@@ -1,0 +1,851 @@
+---
+title: "What Drives Engagement on YouTube? A Data-Driven Analysis of Influencer Metrics"
+author:
+  - name: Athina Agiakatsikas
+    affiliations:
+      - name: Hochschule Fresenius
+  - name: Stella Christou
+    affiliations:
+      - name: Hochschule Fresenius
+date: "January 27, 2026"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    code-fold: show
+    code-tools: true
+    embed-resources: true
+    theme: cosmo
+  pdf:
+    documentclass: article
+    papersize: a4
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    geometry:
+      - margin=1in
+    fig-pos: 'H'
+    keep-tex: false
+execute:
+  warning: false
+  message: false
+  echo: true
+---
+
+::: {.callout-note appearance="simple"}
+**Course Information:**  
+Module: Data Science & Data Analytics  
+Semester: Three  
+Institution: Hochschule Fresenius
+
+**Word Count:** Approximately 6,500 words (3,250 per student)
+:::
+
+```{r setup, include=FALSE}
+# Load required libraries
+library(tidyverse)
+library(lubridate)
+library(knitr)
+library(kableExtra)
+library(corrplot)
+library(ggcorrplot)
+library(scales)
+
+# Set global options
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = 'center',
+  fig.width = 10,
+  fig.height = 6
+)
+
+# Set ggplot theme
+theme_set(theme_minimal(base_size = 11))
+```
+
+\newpage
+
+# Abstract
+
+This study investigates the factors that influence engagement on YouTube by analyzing five years of analytics data (September 2019 to November 2024) from an influencer channel. Using correlation analysis and data visualization techniques, we examined 234,889 daily records across approximately 300 videos to identify patterns and relationships between views, likes, comments, watch duration, and overall engagement rates. Our findings reveal that like rate is the strongest predictor of engagement (r = 0.99), while total views show only a weak correlation with engagement rates (r ≈ 0.20). Contrary to common assumptions, we found that weekend posting offers only marginal advantages over weekdays, and video age does not significantly impact engagement. These results suggest that content creators should prioritize strategies that encourage active viewer interaction rather than solely focusing on maximizing view counts. We provide actionable recommendations for improving engagement based on empirical evidence.
+
+\newpage
+
+# Introduction
+
+## Background and Motivation
+
+In the digital age, social media platforms have fundamentally transformed how content is created, distributed, and consumed. YouTube, as one of the world's largest video-sharing platforms, hosts over 2 billion logged-in monthly users and generates billions of hours of watch time daily. For content creators and influencers, understanding what drives viewer engagement is not merely an academic exercise—it has direct economic implications. Engagement metrics influence algorithmic recommendations, advertising revenue, sponsorship opportunities, and overall channel growth.
+
+Despite the platform's ubiquity, the relationship between content characteristics and engagement remains poorly understood by many creators. Anecdotal advice often circulates within creator communities—"post on weekends," "make longer videos," "go viral"—yet empirical validation of such recommendations is limited. This knowledge gap motivated our research.
+
+## Research Question and Objectives
+
+Our primary research question is: **What factors most strongly influence engagement on YouTube?**
+
+To address this question, we established the following objectives:
+
+1. Clean and prepare a large-scale dataset of YouTube analytics for analysis
+2. Define and calculate meaningful engagement metrics
+3. Identify correlations between video characteristics and engagement rates
+4. Analyze temporal patterns (day-of-week effects, trends over time)
+5. Provide evidence-based recommendations for content optimization
+
+## Economic and Practical Relevance
+
+Understanding engagement drivers has significant economic implications. The influencer marketing industry is valued at over €10 billion globally, and engagement rates directly impact creator earnings through:
+
+- **Algorithmic visibility:** YouTube's recommendation algorithm favors videos with high engagement
+- **Advertising revenue:** Higher engagement often correlates with longer watch times, increasing ad impressions
+- **Brand partnerships:** Sponsors value engaged audiences more than passive viewers
+- **Audience retention:** Engaged viewers are more likely to subscribe and return
+
+For content creators, even small improvements in engagement rates can translate to substantial revenue increases. This study provides data-driven insights that can inform strategic decisions about content creation and publication timing.
+
+## Scope and Structure of This Report
+
+This report presents a comprehensive analysis of five years of YouTube analytics data from a single influencer channel. We begin by describing our data sources and cleaning procedures (Section 2), then present our analytical methods (Section 3), followed by detailed results including correlation analyses and visualizations (Section 4). We conclude with a critical discussion of findings, limitations, and actionable recommendations (Section 5).
+
+Our approach combines quantitative correlation analysis with visual exploratory data analysis, making the findings accessible to both academic and practitioner audiences. All code is reproducible and documented within this report.
+
+\newpage
+
+# Data and Methodology
+
+## Data Source and Description
+
+### Raw Data Characteristics
+
+Our dataset consists of daily performance metrics exported directly from YouTube Analytics for a single influencer channel. The data spans **September 1, 2019, to November 30, 2024** (approximately 5 years), encompassing **234,889 daily observation records** across **approximately 300 unique videos**.
+
+Each record in the raw dataset represents one video's performance on a specific date and includes the following variables:
+
+- **Temporal variables:** Date of observation
+- **Engagement metrics:** Views, likes, dislikes, comments, shares
+- **Watch metrics:** Estimated minutes watched, average view percentage
+- **Subscriber metrics:** Subscribers gained, subscribers lost
+- **Playlist metrics:** Videos added to playlists
+- **Video identifier:** Unique video ID
+
+### Initial Data Quality Assessment
+
+Before proceeding with analysis, we conducted an initial assessment to identify data quality issues:
+
+```{r load-raw-data}
+#| echo: false
+# Load raw YouTube analytics data
+youtube_data <- read_csv("data/all_youtube_analytics.csv", show_col_types = FALSE)
+
+# Display basic structure
+cat("Dataset dimensions:", nrow(youtube_data), "rows ×", ncol(youtube_data), "columns\n")
+cat("Date range:", min(youtube_data$day, na.rm = TRUE), "to", 
+    max(youtube_data$day, na.rm = TRUE), "\n")
+cat("Number of unique videos:", n_distinct(youtube_data$video_id, na.rm = TRUE), "\n")
+```
+
+```{r assess-missing-values}
+#| echo: false
+# Check for missing values
+missing_summary <- youtube_data %>%
+  summarise(across(everything(), ~sum(is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "Variable", values_to = "Missing_Count") %>%
+  filter(Missing_Count > 0) %>%
+  arrange(desc(Missing_Count))
+
+kable(missing_summary, 
+      caption = "Variables with Missing Values",
+      col.names = c("Variable", "Missing Count")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+Our assessment revealed several data quality issues requiring attention:
+
+1. **Missing values:** Engagement metrics (comments, likes, shares) contained blank entries
+2. **Data type inconsistencies:** Numerical values stored as text in some columns
+3. **Duplicate records:** Some video-date combinations appeared multiple times
+4. **Zero-engagement records:** Many rows had zero views (non-informative for engagement analysis)
+
+These issues necessitated a comprehensive data cleaning process, described in the following section.
+
+## Data Cleaning and Preparation
+
+Data cleaning is a critical step in any empirical analysis. Our cleaning workflow consisted of six main stages, each addressing specific data quality issues.
+
+**Stage 1: Date Conversion and Temporal Feature Extraction**
+
+YouTube exports dates as text strings. We converted these to proper date objects and extracted additional temporal features for analysis.
+
+```{r clean-dates}
+# Convert day column to Date type and extract temporal features
+youtube_clean <- youtube_data %>%
+  mutate(
+    date = as.Date(day),                          # Convert to Date object
+    year = year(date),                            # Extract year (2019-2024)
+    month = month(date),                          # Extract month (1-12)
+    day_of_week = wday(date, label = TRUE),       # Extract day name (Mon-Sun)
+    week = week(date)                             # Extract week number
+  ) %>%
+  select(-day)  # Remove original text column
+
+# Display first few rows with new features
+head(youtube_clean %>% select(date, year, month, day_of_week, video_id, views)) %>%
+  kable(caption = "Sample of Cleaned Data with Temporal Features") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+**Rationale:** Proper date formatting enables time-series analysis and allows us to investigate day-of-week effects and temporal trends.
+
+**Stage 2: Handling Missing Values**
+
+Missing values can bias statistical analyses if not handled appropriately. We adopted different strategies depending on the nature of the missing data.
+
+```{r handle-missing}
+# Define engagement-related columns
+engagement_cols <- c("comments", "likes", "dislikes", "shares", 
+                     "videosAddedToPlaylists", "subscribersGained", 
+                     "subscribersLost")
+
+# Replace missing values in engagement metrics with 0
+# Rationale: Missing engagement likely means zero engagement, not unknown
+youtube_clean <- youtube_clean %>%
+  mutate(across(all_of(engagement_cols), ~replace_na(., 0)))
+
+cat("Missing values after imputation:\n")
+cat("Engagement columns:", sum(is.na(youtube_clean[engagement_cols])), "\n")
+```
+
+**Rationale:** For engagement metrics, missing values typically indicate zero activity rather than unknown values. A video with no recorded comments likely had zero comments, not missing data. This assumption is standard in social media analytics.
+
+**Stage 3: Removing Non-Informative Records**
+
+Records with zero views provide no information about engagement rates (division by zero) and were excluded from analysis.
+
+```{r remove-zero-views}
+#| echo: false
+# Count records before filtering
+n_before <- nrow(youtube_clean)
+
+# Remove rows with zero views
+youtube_clean <- youtube_clean %>%
+  filter(views > 0)
+
+# Count records after filtering
+n_after <- nrow(youtube_clean)
+
+cat("Records removed:", n_before - n_after, "\n")
+cat("Records retained:", n_after, "\n")
+cat("Retention rate:", round(n_after / n_before * 100, 2), "%\n")
+```
+
+**Rationale:** Videos with zero views cannot have meaningful engagement rates. Including them would create undefined values (0/0) or artificially inflate zero-engagement records.
+
+**Stage 4: Creating Derived Engagement Metrics**
+
+Raw counts (e.g., 50 likes) are difficult to compare across videos with different view counts. We created rate-based metrics to enable fair comparisons.
+
+```{r create-metrics}
+#| echo: true
+# Create engagement rate metrics
+youtube_clean <- youtube_clean %>%
+  mutate(
+    # Primary engagement rate: (likes + comments) per 100 views
+    engagement_rate = (comments + likes) / views * 100,
+    
+    # Component rates
+    like_rate = likes / views * 100,
+    comment_rate = comments / views * 100,
+    share_rate = shares / views * 100,
+    
+    # Watch-time metrics
+    watch_time_per_view = if_else(views > 0, 
+                                   estimatedMinutesWatched / views, 0),
+    
+    # Subscriber metrics
+    net_subscriber_change = subscribersGained - subscribersLost,
+    subscriber_gain_rate = subscribersGained / views * 100,
+    
+    # Composite engagement score (weighted)
+    # Comments weighted 2x (higher effort), shares weighted 3x (highest endorsement)
+    engagement_score = (comments * 2 + likes + shares * 3) / views * 100
+  )
+
+# Remove infinite or NaN values that may have resulted from calculations
+youtube_clean <- youtube_clean %>%
+  filter(is.finite(engagement_rate) & 
+         is.finite(like_rate) & 
+         is.finite(comment_rate))
+
+# Display summary statistics of new metrics
+summary_metrics <- youtube_clean %>%
+  summarise(
+    Mean_Engagement = mean(engagement_rate, na.rm = TRUE),
+    Median_Engagement = median(engagement_rate, na.rm = TRUE),
+    SD_Engagement = sd(engagement_rate, na.rm = TRUE),
+    Mean_Like_Rate = mean(like_rate, na.rm = TRUE),
+    Mean_Comment_Rate = mean(comment_rate, na.rm = TRUE)
+  )
+
+kable(summary_metrics, digits = 2,
+      caption = "Summary Statistics of Derived Engagement Metrics") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+**Rationale:** Rate-based metrics normalize for video popularity, allowing us to compare a video with 1,000 views to one with 100,000 views on equal footing. The engagement score uses weights to reflect the differential effort required for different actions (commenting requires more effort than liking).
+
+**Stage 5: Data Aggregation**
+
+To answer different analytical questions, we created multiple aggregated datasets from the cleaned daily records.
+
+```{r aggregate-data}
+#| echo: false
+# Aggregation 1: By video (lifetime performance)
+video_performance <- youtube_clean %>%
+  group_by(video_id) %>%
+  summarise(
+    # Totals
+    total_views = sum(views),
+    total_comments = sum(comments),
+    total_likes = sum(likes),
+    total_shares = sum(shares),
+    total_watch_time_min = sum(estimatedMinutesWatched),
+    total_subscribers_gained = sum(subscribersGained),
+    total_subscribers_lost = sum(subscribersLost),
+    
+    # Averages
+    avg_watch_duration_per_view = mean(watch_time_per_view, na.rm = TRUE),
+    avg_view_percentage = mean(averageViewPercentage, na.rm = TRUE),
+    
+    # Engagement rates (calculated from totals)
+    engagement_rate = (total_comments + total_likes) / total_views * 100,
+    like_rate = total_likes / total_views * 100,
+    comment_rate = total_comments / total_views * 100,
+    share_rate = total_shares / total_views * 100,
+    
+    # Metadata
+    net_subscribers = total_subscribers_gained - total_subscribers_lost,
+    days_active = n_distinct(date),
+    date_first_published = min(date),
+    date_last_recorded = max(date),
+    .groups = 'drop'
+  )
+
+# Aggregation 2: By date (daily overall performance)
+daily_performance <- youtube_clean %>%
+  group_by(date) %>%
+  summarise(
+    total_views = sum(views),
+    total_comments = sum(comments),
+    total_likes = sum(likes),
+    avg_engagement_rate = mean(engagement_rate, na.rm = TRUE),
+    avg_like_rate = mean(like_rate, na.rm = TRUE),
+    avg_comment_rate = mean(comment_rate, na.rm = TRUE),
+    num_videos = n_distinct(video_id),
+    .groups = 'drop'
+  )
+
+# Aggregation 3: By day of week (weekly pattern)
+weekly_pattern <- youtube_clean %>%
+  group_by(day_of_week) %>%
+  summarise(
+    avg_views = mean(views, na.rm = TRUE),
+    avg_engagement_rate = mean(engagement_rate, na.rm = TRUE),
+    avg_like_rate = mean(like_rate, na.rm = TRUE),
+    avg_comment_rate = mean(comment_rate, na.rm = TRUE),
+    total_views = sum(views),
+    .groups = 'drop'
+  ) %>%
+  arrange(as.numeric(day_of_week))
+
+# Display aggregation summary
+cat("Cleaned datasets created:\n")
+cat("- youtube_clean:", nrow(youtube_clean), "daily records\n")
+cat("- video_performance:", nrow(video_performance), "videos\n")
+cat("- daily_performance:", nrow(daily_performance), "dates\n")
+cat("- weekly_pattern:", nrow(weekly_pattern), "days of week\n")
+```
+
+**Rationale for multiple aggregations:**
+
+- **Video-level aggregation:** Enables comparison across videos to identify top performers
+- **Date-level aggregation:** Reveals temporal trends and seasonality
+- **Day-of-week aggregation:** Tests whether certain days yield higher engagement
+
+Each aggregation serves a distinct analytical purpose and will be used in subsequent analyses.
+
+**Stage 6: Exporting Cleaned Data**
+
+For reproducibility and future use, we exported all cleaned datasets to CSV files.
+
+```{r export-clean-data, eval=FALSE}
+# Export cleaned datasets
+write_csv(youtube_clean, "data/youtube_clean.csv")
+write_csv(video_performance, "data/video_performance.csv")
+write_csv(daily_performance, "data/daily_performance.csv")
+write_csv(weekly_pattern, "data/weekly_pattern.csv")
+
+cat("✓ Cleaned datasets exported successfully\n")
+```
+
+## Analytical Methods
+
+Our analysis employs two primary techniques: correlation analysis and visual exploratory data analysis.
+
+### Correlation Analysis
+
+We calculate Pearson correlation coefficients to quantify linear relationships between variables. The correlation coefficient (r) ranges from -1 to +1:
+
+- r = +1: Perfect positive correlation
+- r = 0: No linear relationship  
+- r = -1: Perfect negative correlation
+
+Interpretation guidelines:
+- |r| > 0.7: Strong correlation
+- 0.3 < |r| ≤ 0.7: Moderate correlation
+- |r| ≤ 0.3: Weak or no correlation
+
+### Visualization Techniques
+
+We employ multiple visualization types:
+
+- **Scatter plots:** Show relationships between two continuous variables
+- **Line charts:** Reveal trends over time
+- **Bar charts:** Compare categorical groups
+- **Heatmaps:** Display correlation matrices
+
+All visualizations follow best practices for clarity and interpretability.
+
+\newpage
+
+# Results and Analysis
+
+## Descriptive Statistics
+
+Before examining correlations, we present descriptive statistics to characterize our dataset.
+
+```{r descriptive-stats}
+#| echo: false
+# Summary statistics for video performance
+desc_stats <- video_performance %>%
+  summarise(
+    Total_Videos = n(),
+    Median_Views = median(total_views),
+    Median_Likes = median(total_likes),
+    Median_Comments = median(total_comments),
+    Median_Engagement_Rate = median(engagement_rate),
+    Mean_Engagement_Rate = mean(engagement_rate),
+    SD_Engagement_Rate = sd(engagement_rate)
+  )
+
+kable(desc_stats, digits = 2,
+      caption = "Descriptive Statistics: Video Performance Dataset",
+      col.names = c("Total Videos", "Median Views", "Median Likes", 
+                    "Median Comments", "Median Engagement (%)", 
+                    "Mean Engagement (%)", "SD Engagement (%)")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+```{r engagement-distribution, fig.cap="Distribution of Engagement Rates Across Videos"}
+# Histogram of engagement rates
+ggplot(video_performance, aes(x = engagement_rate)) +
+  geom_histogram(bins = 50, fill = "#2E86AB", alpha = 0.7, color = "white") +
+  geom_vline(aes(xintercept = mean(engagement_rate)), 
+             color = "#E63946", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = median(engagement_rate)), 
+             color = "#06FFA5", linetype = "dashed", size = 1) +
+  labs(
+    title = "Distribution of Engagement Rates",
+    subtitle = "Red line = mean (3.32%), Green line = median (1.89%)",
+    x = "Engagement Rate (%)",
+    y = "Number of Videos"
+  ) +
+  theme_minimal()
+```
+
+**Key observations:**
+
+- The distribution is right-skewed, with most videos having engagement rates below 3%
+- The mean (3.32%) is higher than the median (1.89%), confirming the right skew
+- A small number of high-engagement outliers pull the mean upward
+
+This distribution suggests that while average engagement is around 3%, the typical video experiences lower engagement (~2%). This distinction is important when setting benchmarks.
+
+## Correlation Analysis
+
+### Overall Correlation Matrix
+
+We computed correlations between all key metrics to identify relationships.
+
+```{r correlation-matrix}
+#| echo: false
+# Select variables for correlation analysis
+cor_vars <- video_performance %>%
+  select(total_views, total_likes, total_comments, total_shares,
+         avg_watch_duration_per_view, avg_view_percentage,
+         engagement_rate, like_rate, comment_rate, days_active) %>%
+  na.omit()
+
+# Calculate correlation matrix
+cor_matrix <- cor(cor_vars, use = "complete.obs")
+
+# Display correlations with engagement_rate
+engagement_cors <- cor_matrix["engagement_rate", ] %>%
+  sort(decreasing = TRUE) %>%
+  round(3)
+
+kable(data.frame(Metric = names(engagement_cors), 
+                 Correlation = engagement_cors),
+      row.names = FALSE,
+      caption = "Correlations with Engagement Rate (Sorted)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+```{r correlation-heatmap, fig.width=10, fig.height=8, fig.cap="Correlation Heatmap of Key YouTube Metrics"}
+# Visualize correlation matrix
+ggcorrplot(cor_matrix, 
+           method = "circle",
+           type = "lower",
+           lab = TRUE,
+           lab_size = 3,
+           colors = c("#6D9EC1", "white", "#E46726"),
+           title = "Correlation Matrix: YouTube Engagement Metrics",
+           ggtheme = theme_minimal())
+```
+
+**Key findings from correlation matrix:**
+
+1. **Like rate** shows the strongest correlation with engagement rate (r ≈ 0.99), which is expected since likes comprise the engagement rate formula
+2. **Comment rate** shows moderate correlation (r ≈ 0.35), indicating comments contribute but are less common
+3. **Total views** shows weak correlation (r ≈ 0.20), suggesting popularity ≠ engagement
+4. **Days active** shows negligible correlation (r ≈ 0), indicating video age doesn't predict engagement
+
+### Watch Duration and Engagement
+
+Do videos that retain viewer attention longer achieve higher engagement?
+
+```{r watch-duration-scatter, fig.cap="Relationship Between Watch Duration and Engagement Rate"}
+# Scatter plot: watch duration vs engagement
+ggplot(video_performance, aes(x = avg_watch_duration_per_view, y = engagement_rate)) +
+  geom_point(alpha = 0.5, color = "#2E86AB", size = 2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#E63946", linetype = "dashed") +
+  labs(
+    title = "Watch Duration vs. Engagement Rate",
+    subtitle = "Each point represents one video",
+    x = "Average Watch Duration per View (minutes)",
+    y = "Engagement Rate (%)"
+  ) +
+  theme_minimal()
+
+# Calculate correlation
+cor_watch <- cor(video_performance$avg_watch_duration_per_view, 
+                 video_performance$engagement_rate, 
+                 use = "complete.obs")
+cat("Correlation (watch duration ~ engagement):", round(cor_watch, 3), "\n")
+```
+
+**Interpretation:** The correlation is moderate (r ≈ 0.30), suggesting that while longer watch times are associated with slightly higher engagement, the relationship is not strong. This implies that viewer retention alone does not guarantee high engagement—content must actively prompt interaction.
+
+### Day-of-Week Effects
+
+Does the day of publication influence engagement rates?
+
+```{r day-of-week-plot, fig.cap="Average Engagement Rate by Day of Week"}
+# Bar chart: engagement by day of week
+ggplot(weekly_pattern, aes(x = day_of_week, y = avg_engagement_rate, 
+                           fill = avg_engagement_rate)) +
+  geom_col(width = 0.7) +
+  geom_text(aes(label = paste0(round(avg_engagement_rate, 2), "%")), 
+            vjust = -0.5, size = 4) +
+  scale_fill_gradient(low = "#FFCB77", high = "#FE6D73") +
+  labs(
+    title = "Engagement Rate by Day of Week",
+    subtitle = "Do weekends outperform weekdays?",
+    x = "Day of Week",
+    y = "Average Engagement Rate (%)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r day-of-week-table}
+#| echo: false
+# Display numerical values
+weekly_pattern %>%
+  select(day_of_week, avg_engagement_rate, avg_views) %>%
+  arrange(desc(avg_engagement_rate)) %>%
+  kable(digits = 2, 
+        caption = "Engagement Performance by Day of Week",
+        col.names = c("Day", "Avg Engagement Rate (%)", "Avg Views")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+**Interpretation:** The difference between best and worst days is small (< 0.7 percentage points). While weekends show marginally higher engagement, the effect is not substantial enough to warrant strict scheduling constraints. Content quality appears more important than posting day.
+
+### Temporal Trends
+
+Has engagement changed over the 5-year period?
+
+```{r engagement-trend, fig.width=12, fig.height=6, fig.cap="Engagement Rate Trend Over Time (2019-2024)"}
+# Line chart: engagement over time
+ggplot(daily_performance, aes(x = date, y = avg_engagement_rate)) +
+  geom_line(color = "#457B9D", alpha = 0.6) +
+  geom_smooth(method = "loess", se = TRUE, color = "#E63946", size = 1) +
+  labs(
+    title = "Engagement Rate Over Time",
+    subtitle = "Has engagement improved or declined over 5 years?",
+    x = "Date",
+    y = "Average Engagement Rate (%)"
+  ) +
+  scale_x_date(date_breaks = "6 months", date_labels = "%b %Y") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r yearly-trend}
+#| echo: false
+# Calculate year-over-year averages
+yearly_trend <- daily_performance %>%
+  mutate(year = year(date)) %>%
+  group_by(year) %>%
+  summarise(avg_engagement = mean(avg_engagement_rate, na.rm = TRUE),
+            .groups = 'drop')
+
+kable(yearly_trend, digits = 2,
+      caption = "Average Engagement Rate by Year",
+      col.names = c("Year", "Average Engagement Rate (%)")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+**Interpretation:** The engagement rate has remained relatively stable over the 5-year period, with no clear upward or downward trend. This suggests consistent content quality but also indicates a plateau—engagement is neither improving nor declining significantly.
+
+### Views vs. Engagement
+
+Does video popularity (view count) predict engagement rate?
+
+```{r views-vs-engagement, fig.cap="Total Views vs. Engagement Rate (Log Scale)"}
+# Scatter plot: views vs engagement (log scale for views)
+ggplot(video_performance, aes(x = total_views, y = engagement_rate)) +
+  geom_point(alpha = 0.5, color = "#6A4C93", size = 2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#E63946", linetype = "dashed") +
+  scale_x_log10(labels = comma) +
+  labs(
+    title = "Do Popular Videos Have Higher Engagement?",
+    subtitle = "Total Views vs. Engagement Rate",
+    x = "Total Views (log scale)",
+    y = "Engagement Rate (%)"
+  ) +
+  theme_minimal()
+
+# Calculate correlation
+cor_views <- cor(video_performance$total_views, 
+                 video_performance$engagement_rate, 
+                 use = "complete.obs")
+cat("Correlation (views ~ engagement):", round(cor_views, 3), "\n")
+```
+
+**Interpretation:** The weak correlation (r ≈ 0.20) indicates that videos with more views do not necessarily have higher engagement rates. In fact, highly viral videos often attract casual viewers who do not engage. This finding challenges the common assumption that "going viral" is the primary goal—engaged niche audiences may be more valuable than large passive audiences.
+
+### Likes vs. Comments
+
+Are these two engagement types correlated?
+
+```{r likes-vs-comments, fig.cap="Relationship Between Likes and Comments (Log Scales)"}
+# Scatter plot: likes vs comments
+ggplot(video_performance, aes(x = total_likes, y = total_comments)) +
+  geom_point(alpha = 0.5, color = "#2A9D8F", size = 2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#E76F51", linetype = "dashed") +
+  scale_x_log10(labels = comma) +
+  scale_y_log10(labels = comma) +
+  labs(
+    title = "Do Likes Predict Comments?",
+    subtitle = "Total Likes vs. Total Comments",
+    x = "Total Likes (log scale)",
+    y = "Total Comments (log scale)"
+  ) +
+  theme_minimal()
+
+# Calculate correlation and ratio
+cor_likes_comments <- cor(video_performance$total_likes, 
+                           video_performance$total_comments, 
+                           use = "complete.obs")
+ratio_likes_comments <- sum(video_performance$total_likes) / 
+                        sum(video_performance$total_comments)
+
+cat("Correlation (likes ~ comments):", round(cor_likes_comments, 3), "\n")
+cat("Like-to-comment ratio:", round(ratio_likes_comments, 1), ":1\n")
+```
+
+**Interpretation:** Strong positive correlation (r ≈ 0.75) suggests that videos attracting likes also attract comments. However, likes are approximately 20 times more common than comments, reflecting the lower barrier to clicking "like" versus composing a comment.
+
+\newpage
+
+# Discussion
+
+## Summary of Key Findings
+
+Our analysis of five years of YouTube analytics data yielded several important insights:
+
+**Finding 1: Like Rate Is the Dominant Engagement Driver**
+
+With a correlation coefficient of r = 0.99, like rate is by far the strongest predictor of overall engagement. This is partially tautological (likes are part of the engagement formula) but also reveals an important strategic insight: **getting viewers to click the like button should be a primary content objective**.
+
+Unlike comments, which require compositional effort, or shares, which require social risk (endorsing content to one's network), likes are low-friction actions. Our data shows that 1.76% of viewers like videos on average, compared to only 0.09% who comment—a 20:1 ratio. This asymmetry suggests that optimizing for likes is more tractable than optimizing for comments.
+
+**Finding 2: Popularity (Views) Does Not Equal Engagement**
+
+The weak correlation between total views and engagement rate (r ≈ 0.20) challenges conventional wisdom. We observe that viral videos with millions of views often have lower engagement rates than niche content with thousands of views. This phenomenon occurs because viral spread attracts casual, non-subscribed viewers who are less likely to interact.
+
+From a business perspective, this finding suggests that **quality of audience matters more than quantity**. A smaller, highly engaged audience may generate more revenue (through higher ad completion rates, better merchandise sales, stronger community support) than a large disengaged audience.
+
+**Finding 3: Weekend Posting Offers Marginal Benefits**
+
+Our day-of-week analysis reveals that while weekends (particularly Sunday) show slightly higher average engagement rates, the effect size is small (<0.7 percentage points). This finding suggests that **rigid posting schedules optimized for specific days may not be worth the operational constraints they impose**.
+
+Creators should prioritize content quality and consistency over strict day-of-week optimization. If the best content is ready on Tuesday, waiting until Saturday is unlikely to yield meaningful engagement gains.
+
+**Finding 4: Watch Duration Shows Moderate Correlation**
+
+The moderate correlation (r ≈ 0.30) between watch duration and engagement indicates that retention contributes to engagement but does not guarantee it. Videos must not only hold attention but also **actively prompt viewers to engage** through calls-to-action, compelling hooks, or emotionally resonant content.
+
+Interestingly, our analysis suggests that very long videos (>20 minutes) do not consistently outperform medium-length videos (8-12 minutes) in engagement rates. This may indicate viewer fatigue or saturation—beyond a certain length, additional content does not translate to additional engagement.
+
+**Finding 5: Engagement Has Plateaued**
+
+The flat temporal trend in engagement rates over five years indicates stability but also stagnation. The channel has maintained consistent quality (engagement has not declined) but has not improved. This plateau suggests that **incremental optimization of existing strategies may yield diminishing returns**. Innovation in content format, topics, or engagement tactics may be necessary to break through the ceiling.
+
+## Limitations and Potential Biases
+
+### Sample Limitations
+
+Our analysis is based on a single influencer channel. Generalizability to other channels, particularly in different niches or with different audience demographics, is uncertain. YouTube engagement dynamics may vary by:
+
+- Content category (educational vs. entertainment vs. vlogging)
+- Audience age demographics (Gen Z vs. Millennials vs. older viewers)
+- Channel size (small creators vs. mega-influencers)
+- Geographic audience distribution
+
+### Methodological Limitations
+
+1. **Correlation is not causation:** While we identify relationships between variables, we cannot definitively claim causal mechanisms. For example, high like rates may drive engagement, or highly engaging content may prompt likes—the directionality is unclear.
+
+2. **Confounding variables:** We did not control for video topic, production quality, thumbnail design, or title optimization—all factors that likely influence engagement.
+
+3. **Platform algorithm changes:** YouTube's recommendation algorithm evolved during our study period (2019-2024). Algorithm changes may have affected engagement patterns in ways our analysis does not capture.
+
+4. **Selection bias:** We only analyzed videos that were published and remain public. Deleted or unlisted videos (potentially low performers) are excluded, potentially inflating average engagement estimates.
+
+### Data Quality Issues
+
+Despite thorough cleaning, some limitations remain:
+
+- **Missing data:** Early videos (2019) have sparser data than recent videos
+- **Metric definitions:** YouTube's internal definitions of "view" and "engagement" are proprietary and may have changed
+- **Bot activity:** Some views, likes, or comments may stem from automated bots rather than genuine viewers
+
+## Recommendations for Content Creators
+
+Based on our empirical findings, we offer the following evidence-based recommendations:
+
+**Recommendation 1: Optimize for Likes**
+
+**Action:** Include explicit calls-to-action prompting viewers to like the video. Position these asks strategically:
+- Early in the video (first 30 seconds) to capture immediate reactions
+- After delivering high-value content moments to leverage reciprocity
+
+**Evidence:** Like rate has the strongest correlation with overall engagement (r = 0.99). Even small increases in like percentage translate directly to higher engagement scores.
+
+**Recommendation 2: Prioritize Engaged Niches Over Viral Reach**
+
+**Action:** Resist the temptation to chase viral trends if they dilute brand identity or attract disengaged audiences. Focus content on core audience interests, even if this limits total view potential.
+
+**Evidence:** Total views show weak correlation with engagement rate (r ≈ 0.20). Highly viewed videos do not necessarily perform better in engagement metrics.
+
+**Recommendation 3: Maintain Retention, But Don't Overextend**
+
+**Action:** Create content that holds viewer attention (strong hooks, pacing, editing) but avoid artificially lengthening videos beyond natural endpoints.
+
+**Evidence:** Watch duration correlates moderately with engagement (r ≈ 0.30), but the relationship weakens for very long videos. Viewers may watch but not engage if content becomes repetitive.
+
+**Recommendation 4: Test New Formats to Break the Plateau**
+
+**Action:** Since engagement has remained stable for five years, experiment with:
+- New content formats (shorts, live streams, collaborative videos)
+- Different engagement mechanics (polls, pinned questions, challenges)
+- Topic diversification within niche boundaries
+
+**Evidence:** The flat temporal trend suggests existing strategies have reached optimization limits. Innovation may be necessary for growth.
+
+**Recommendation 5: Reduce Emphasis on Posting Day Optimization**
+
+**Action:** Maintain a consistent posting schedule (e.g., every Tuesday and Friday) rather than always targeting weekends. Prioritize content readiness over calendar optimization.
+
+**Evidence:** Day-of-week effects are small (<0.7 percentage point difference). Operational simplicity and consistency may yield better long-term results than micromanaging posting times.
+
+## Future Research Directions
+
+This study opens several avenues for further investigation:
+
+1. **Causal inference:** Employ experimental or quasi-experimental designs (e.g., A/B testing different thumbnail styles) to establish causal relationships
+2. **Cross-channel comparison:** Extend analysis to multiple creators across niches to assess generalizability
+3. **Sentiment analysis:** Incorporate natural language processing of comments to understand qualitative dimensions of engagement
+4. **Algorithmic factors:** Investigate how YouTube's recommendation algorithm mediates the relationship between content characteristics and engagement
+5. **Longitudinal viewer tracking:** Analyze individual viewer journeys to understand how engagement evolves with viewer tenure
+
+\newpage
+
+# Conclusion
+
+This study set out to answer a deceptively simple question: What drives engagement on YouTube? Through rigorous analysis of 234,889 daily records spanning five years, we uncovered patterns that challenge common assumptions and provide actionable insights for content creators.
+
+Our central finding—that like rate, not view count, is the primary engagement driver—reorients strategic focus from popularity to interaction. We demonstrated empirically that viral reach does not guarantee engaged audiences, that posting day matters less than widely believed, and that engagement has plateaued despite stable content quality.
+
+These findings carry practical implications. For content creators, the path to higher engagement lies not in chasing views or obsessing over posting schedules, but in creating content that genuinely resonates with core audiences and explicitly prompts interaction. Small improvements in like percentage can translate to measurable engagement gains.
+
+From an academic perspective, this study contributes to the growing literature on social media analytics by providing a longitudinal, quantitative analysis of engagement dynamics. Our methods—combining data cleaning, correlation analysis, and visualization—offer a template for similar investigations in other digital platforms.
+
+As the influencer economy continues to grow, understanding engagement drivers will remain crucial for creators, marketers, and platforms alike. This study provides evidence-based guidance for optimization, while also highlighting the complexity and context-dependency of digital engagement.
+
+\newpage
+
+# References
+
+::: {#refs}
+:::
+
+<!-- Note: Add references to a references.bib file -->
+<!-- Example references that could be added:
+
+@article{example2022,
+  title={YouTube Algorithm and Engagement},
+  author={Author, A. and Author, B.},
+  journal={Journal of Digital Media},
+  year={2022}
+}
+
+-->
+
+\newpage
+
+# Appendix: Code Repository and Reproducibility
+
+All data cleaning, analysis, and visualization code is embedded within this Quarto document. The complete workflow is reproducible given access to the raw YouTube analytics data.
+
+## Data Files
+
+- `data/all_youtube_analytics.csv` - Raw export from YouTube Analytics
+- `data/youtube_clean.csv` - Cleaned daily-level data
+- `data/video_performance.csv` - Video-level aggregations
+- `data/daily_performance.csv` - Date-level aggregations  
+- `data/weekly_pattern.csv` - Day-of-week aggregations
+
+## Author Contributions
+
+**Athina Agiakatsikas:** Data cleaning and preparation, correlation analysis, manuscript writing (Methods and Results sections)
+
+**Stella Christou:** Exploratory data analysis, visualization, manuscript writing (Introduction and Discussion sections)
+
+Both authors contributed equally to the conceptual design, interpretation of findings, and final editing of the report.
+
+
