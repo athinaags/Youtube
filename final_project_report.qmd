@@ -119,7 +119,7 @@ Our approach combines quantitative correlation analysis with visual exploratory 
 
 ### Raw Data Characteristics
 
-Our dataset consists of daily performance metrics exported directly from YouTube Analytics for a single influencer channel. The data spans **September 1, 2019, to November 30, 2024** (approximately 5 years), encompassing **234,889 daily observation records** across **approximately 300 unique videos**.
+Our dataset consists of daily performance metrics exported directly from YouTube Analytics for a single influencer channel. The data spans **September 1, 2019, to November 30, 2024** (approximately 5 years), including **234,889 daily observation records** across **300 different videos**.
 
 Each record in the raw dataset represents one video's performance on a specific date and includes the following variables:
 
@@ -132,7 +132,7 @@ Each record in the raw dataset represents one video's performance on a specific 
 
 ### Initial Data Quality Assessment
 
-Before proceeding with analysis, we conducted an initial assessment to identify data quality issues:
+Before starting with the analysis, we conducted an initial assessment to identify the data quality issues:
 
 ```{r load-raw-data}
 #| echo: false
@@ -147,7 +147,7 @@ cat("Number of unique videos:", n_distinct(youtube_data$video_id, na.rm = TRUE),
 ```
 
 ```{r assess-missing-values}
-#| echo: false
+#| echo: true
 # Check for missing values
 missing_summary <- youtube_data %>%
   summarise(across(everything(), ~sum(is.na(.)))) %>%
